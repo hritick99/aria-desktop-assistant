@@ -190,19 +190,19 @@ class HistoryPanel(ctk.CTkToplevel):
             ctk.CTkLabel(self._scroll, text="No past sessions yet.",
                          text_color=C["muted"], font=(FONT,12)).pack(pady=40); return
         for s in sessions:
-            row = ctk.CTkFrame(self._scroll, fg_color=C["input_bg"], corner_radius=8)
+            sid = s["session_id"]
+            row = ctk.CTkFrame(self._scroll, fg_color=C["input_bg"], corner_radius=8,
+                               cursor="hand2")
             row.pack(fill="x", padx=4, pady=3)
-            btn = ctk.CTkButton(
-                row, text="", fg_color="transparent", hover_color=C["panel2"],
-                corner_radius=8, anchor="w", height=44,
-                command=lambda sid=s["session_id"]: self._open(sid))
-            btn.pack(fill="x", padx=0, pady=0)
-            inner = ctk.CTkFrame(btn, fg_color="transparent")
-            inner.place(relx=0.02, rely=0.5, anchor="w")
-            ctk.CTkLabel(inner, text=s["preview"], font=(FONT,12), text_color=C["text"],
-                         anchor="w", justify="left").pack(anchor="w")
-            ctk.CTkLabel(inner, text=f"{self._fmt(s['ended'])}  ·  {s['msgs']} messages",
-                         font=(FONT,9), text_color=C["muted"], anchor="w").pack(anchor="w")
+            l1 = ctk.CTkLabel(row, text=s["preview"], font=(FONT,12), text_color=C["text"],
+                              anchor="w", justify="left", cursor="hand2")
+            l1.pack(anchor="w", padx=10, pady=(6,0))
+            l2 = ctk.CTkLabel(row, text=f"{self._fmt(s['ended'])}  ·  {s['msgs']} messages",
+                              font=(FONT,9), text_color=C["muted"], anchor="w", cursor="hand2")
+            l2.pack(anchor="w", padx=10, pady=(0,6))
+            # Make the entire row clickable (labels included).
+            for w in (row, l1, l2):
+                w.bind("<Button-1>", lambda e, i=sid: self._open(i))
 
     def _open(self, session_id):
         self.on_open(session_id)
