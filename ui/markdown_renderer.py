@@ -97,12 +97,12 @@ class MarkdownBubble(ctk.CTkFrame):
         if lite:
             self._bubble = ctk.CTkFrame(
                 self, fg_color=C["panel2"] if is_user else "transparent",
-                corner_radius=14 if is_user else 0)
+                corner_radius=16 if is_user else 0)
             self._bubble.pack(anchor="e" if is_user else "w",
                               fill=None if is_user else "x", padx=6, pady=(2,4))
-            ctk.CTkLabel(self._bubble, text=content, font=(SERIF,12),
+            ctk.CTkLabel(self._bubble, text=content, font=(SERIF,13),
                          text_color=C["text"], wraplength=wrap_width,
-                         justify="left", anchor="w").pack(padx=10, pady=6, fill="x")
+                         justify="left", anchor="w").pack(padx=12, pady=8, fill="x")
             return
 
         hdr = ctk.CTkFrame(self, fg_color="transparent")
@@ -121,8 +121,8 @@ class MarkdownBubble(ctk.CTkFrame):
                          text_color=C["muted"]).pack(side="left" if is_user else "right", padx=6)
 
         if is_user:
-            self._bubble = ctk.CTkFrame(self, fg_color=C["panel2"], corner_radius=14)
-            self._bubble.pack(anchor="e", padx=6, pady=(2,4), ipadx=4)
+            self._bubble = ctk.CTkFrame(self, fg_color=C["panel2"], corner_radius=16)
+            self._bubble.pack(anchor="e", padx=6, pady=(2,4), ipadx=6, ipady=2)
         else:
             self._bubble = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
             self._bubble.pack(fill="x", anchor="w", padx=6, pady=(2,4))
@@ -157,8 +157,8 @@ class MarkdownBubble(ctk.CTkFrame):
         for w in self._bubble.winfo_children(): w.destroy()
         # Fast path for plain text
         if not _HAS_MD.search(content):
-            ctk.CTkLabel(self._bubble, text=content, font=(SERIF,12), text_color=C["text"],
-                         wraplength=self._wrap, justify="left", anchor="w").pack(padx=10,pady=6,fill="x")
+            ctk.CTkLabel(self._bubble, text=content, font=(SERIF,13), text_color=C["text"],
+                         wraplength=self._wrap, justify="left", anchor="w").pack(padx=12,pady=7,fill="x")
             self._bind_menu(self._bubble)
             return
         tokens = _tokenise(content)

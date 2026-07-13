@@ -18,6 +18,14 @@ from ui.theme import C, FONT, SERIF
 
 log = get_logger("overlay")
 
+
+class _Stop(BaseException):
+    """Raised inside the token callback to abort a streaming response.
+    Derives from BaseException so the streaming loops' `except Exception`
+    guards don't swallow it — it propagates out and unwinds the call."""
+    pass
+
+
 _CLEAN = re.compile(
     r'\[\s*(?:FACT|REMEMBER|REMINDER|SEARCH|CODE|CODEEDIT|DELEGATE|AIDER|EMAIL|FILE|WRITE|FIND|OS|SHELL|RAG|MCP)[:\s][^\]]*\]'
     r'|\[\s*(?:CLIPBOARD|SCREENSHOT|DONE)\s*\]', re.I)
@@ -230,6 +238,7 @@ class OverlayApp(ctk.CTk):
         self._visible        = True
         self._tok_q:   queue.Queue = queue.Queue()
         self._rem_q:   queue.Queue = queue.Queue()
+        self._stop_evt = threading.Event()
         self._cur_bubble: Optional[MarkdownBubble] = None
         self._cur_text    = ""
         self._mem_panel   = None
@@ -253,13 +262,13 @@ class OverlayApp(ctk.CTk):
     def _configure_window(self):
         self.title(cfg.get("assistant_name"))
         w,h = cfg.get("window_width"), cfg.get("window_height")
-        x,y = cfg.get("window_x"),     cfg.get("window_y")
+        x,y = self._clamp(cfg.get("window_x"), cfg.get("window_y"), w, h)
         self.geometry(f"{w}x{h}+{x}+{y}")
         self.configure(fg_color=KEY_BG)
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         self.attributes("-alpha", cfg.get("opacity"))
-        self.resizable(False, False)
+        self.resizable(True, True)
         # Transparent window margins → the UI reads as a floating rounded card.
         try: self.attributes("-transparentcolor", KEY_BG)
         except tk.TclError: pass
@@ -312,7 +321,7 @@ class OverlayApp(ctk.CTk):
 
         # Chat
         self.chat_frame = ctk.CTkScrollableFrame(self.card, fg_color="transparent", corner_radius=0)
-        self.chat_frame.pack(fill="both", expand=True, padx=6)
+        self.chat_frame.pack(fill="both", expand=True, padx=10, pady=(2,0))
 
         # Status bar
         self.status_bar = ctk.CTkFrame(self.card, height=24, fg_color="transparent", corner_radius=0)
@@ -324,35 +333,50 @@ class OverlayApp(ctk.CTk):
                       progress_color=C["accent"], font=(FONT,10), text_color=C["muted"],
                       command=self._toggle_tts).pack(side="right")
 
-        # Input bar — one bordered rounded row, controls inside
-        self.input_bar = ctk.CTkFrame(self.card, height=58, fg_color=C["panel"],
-                                      corner_radius=18, border_width=1, border_color=C["border"])
-        self.input_bar.pack(fill="x", side="bottom", padx=10, pady=(0,10)); self.input_bar.pack_propagate(False)
-        self.mic_btn = ctk.CTkButton(self.input_bar, text="🎙", width=36, height=36,
+        # Input bar — a clean rounded pill: [＋]  text …  [🎙] [send]
+        self.input_bar = ctk.CTkFrame(self.card, height=52, fg_color=C["input"],
+                                      corner_radius=26, border_width=1, border_color=C["border"])
+        self.input_bar.pack(fill="x", side="bottom", padx=12, pady=(2,12))
+        self.input_bar.pack_propagate(False)
+
+        # left: attach (+)
+        self.attach_btn = ctk.CTkButton(self.input_bar, text="＋", width=30, height=30,
+                                        fg_color="transparent", hover_color=C["panel2"],
+                                        font=(FONT,18), text_color=C["muted"],
+                                        corner_radius=15, command=self._attach_image)
+        self.attach_btn.pack(side="left", padx=(9,2), pady=11)
+
+        # right: send button (becomes a stop button while thinking)
+        self.send_btn = ctk.CTkButton(self.input_bar, text="↑", width=36, height=36,
+                                       fg_color=C["accent"], hover_color=C["accent2"],
+                                       font=(FONT,17,"bold"), text_color=C["bg"],
+                                       corner_radius=18, command=self._on_send)
+        self.send_btn.pack(side="right", padx=(2,8), pady=8)
+        # mic sits just left of send
+        self.mic_btn = ctk.CTkButton(self.input_bar, text="🎙", width=30, height=30,
                                       fg_color="transparent", hover_color=C["panel2"],
-                                      font=(FONT,14), text_color=C["muted"], corner_radius=18)
-        self.mic_btn.pack(side="left", padx=(10,2), pady=11)
+                                      font=(FONT,15), text_color=C["muted"], corner_radius=15)
+        self.mic_btn.pack(side="right", padx=(0,2), pady=11)
         self.mic_btn.bind("<ButtonPress-1>",   self._mic_press)
         self.mic_btn.bind("<ButtonRelease-1>", self._mic_release)
-        self.attach_btn = ctk.CTkButton(self.input_bar, text="📎", width=32, height=36,
-                                        fg_color="transparent", hover_color=C["panel2"],
-                                        font=(FONT,14), text_color=C["muted"],
-                                        corner_radius=18, command=self._attach_image)
-        self.attach_btn.pack(side="left", padx=(0,2), pady=11)
+
+        # entry fills the middle
         self.input_field = ctk.CTkEntry(self.input_bar,
                                          placeholder_text=f"Message {cfg.get('assistant_name')}…",
-                                         font=(FONT,12), fg_color="transparent", border_width=0,
+                                         font=(FONT,13), fg_color="transparent", border_width=0,
                                          text_color=C["text"],
-                                         placeholder_text_color=C["muted"], height=36)
-        self.input_field.pack(side="left", fill="x", expand=True, padx=(2,6), pady=11)
+                                         placeholder_text_color=C["muted"], height=34)
+        self.input_field.pack(side="left", fill="x", expand=True, padx=(6,4), pady=9)
         self.input_field.bind("<Return>", self._on_send)
         self.input_field.bind("<Control-v>", self._paste_maybe_image, add="+")
         self._bind_edit_menu(self.input_field)
-        self.send_btn = ctk.CTkButton(self.input_bar, text="↑", width=36, height=36,
-                                       fg_color=C["accent"], hover_color=C["accent2"],
-                                       font=(FONT,15,"bold"), text_color=C["bg"],
-                                       corner_radius=18, command=self._on_send)
-        self.send_btn.pack(side="right", padx=(0,10), pady=11)
+
+        # Drag-to-resize grip in the bottom-right corner
+        self.resize_grip = ctk.CTkLabel(self.card, text="⤡", font=(FONT,13),
+                                        text_color=C["muted"], cursor="size_nw_se")
+        self.resize_grip.place(relx=1.0, rely=1.0, anchor="se", x=-3, y=-1)
+        self.resize_grip.bind("<ButtonPress-1>", self._rs_start)
+        self.resize_grip.bind("<B1-Motion>",     self._rs_drag)
 
     def _bind_edit_menu(self, ctk_entry):
         """Right-click Cut/Copy/Paste on an entry (Tk has no native menu)."""
@@ -376,21 +400,47 @@ class OverlayApp(ctk.CTk):
             child.bind("<ButtonPress-1>", self._ds)
             child.bind("<B1-Motion>",     self._dm)
 
+    def _rs_start(self, e):
+        self._rw = self.winfo_width(); self._rh = self.winfo_height()
+        self._rx = e.x_root; self._ry = e.y_root
+
+    def _rs_drag(self, e):
+        w = max(340, self._rw + (e.x_root - self._rx))
+        h = max(380, self._rh + (e.y_root - self._ry))
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        w = min(w, sw - self.winfo_x())
+        h = min(h, sh - self.winfo_y() - 40)
+        self.geometry(f"{int(w)}x{int(h)}")
+        cfg.set("window_width", int(w)); cfg.set("window_height", int(h))
+
+    def _clamp(self, x, y, w, h):
+        """Keep a w×h window fully inside the primary screen."""
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        x = max(0, min(int(x), sw - int(w)))
+        y = max(0, min(int(y), sh - int(h) - 40))   # leave room for the taskbar
+        return x, y
+
     def _ds(self, e): self._dx = e.x_root - self.winfo_x(); self._dy = e.y_root - self.winfo_y()
     def _dm(self, e):
-        x = e.x_root-self._dx; y = e.y_root-self._dy
+        x, y = self._clamp(e.x_root-self._dx, e.y_root-self._dy,
+                           self.winfo_width(), self.winfo_height())
         self.geometry(f"+{x}+{y}"); cfg.set("window_x",x); cfg.set("window_y",y)
 
     def _collapse(self):
         self._collapsed = True
-        sz = cfg.get("collapsed_size"); self.geometry(f"{sz}x{sz}")
+        sz = cfg.get("collapsed_size")
         self.card.pack_forget()
-        self._orb_btn_face = BuddyFace(self, size=sz, get_color=self._buddy_color, bg=KEY_BG)
+        # Reuse a single orb face across collapse/expand (creating/destroying
+        # an animated canvas each time is what made the transition stutter).
+        if self._orb_btn_face is None:
+            self._orb_btn_face = BuddyFace(self, size=sz, get_color=self._buddy_color, bg=KEY_BG)
+            self._orb_btn_face.bind("<ButtonPress-1>",   self._orb_press)
+            self._orb_btn_face.bind("<B1-Motion>",       self._orb_motion)
+            self._orb_btn_face.bind("<ButtonRelease-1>", self._orb_release)
+        self.geometry(f"{sz}x{sz}")
         self._orb_btn_face.pack()
-        self._orb_btn_face.bind("<ButtonPress-1>",   self._orb_press)
-        self._orb_btn_face.bind("<B1-Motion>",       self._orb_motion)
-        self._orb_btn_face.bind("<ButtonRelease-1>", self._orb_release)
         self._orb_btn_face.start()
+        self.update_idletasks()
 
     def _orb_press(self, e):
         self._dx = e.x_root - self.winfo_x(); self._dy = e.y_root - self.winfo_y()
@@ -399,7 +449,8 @@ class OverlayApp(ctk.CTk):
     def _orb_motion(self, e):
         if abs(e.x_root - self._orb_px) + abs(e.y_root - self._orb_py) > 4:
             self._orb_moved = True
-        x = e.x_root - self._dx; y = e.y_root - self._dy
+        sz = cfg.get("collapsed_size")
+        x, y = self._clamp(e.x_root - self._dx, e.y_root - self._dy, sz, sz)
         self.geometry(f"+{x}+{y}"); cfg.set("window_x", x); cfg.set("window_y", y)
 
     def _orb_release(self, e):
@@ -409,9 +460,17 @@ class OverlayApp(ctk.CTk):
     def _expand(self):
         self._collapsed = False
         if self._orb_btn_face is not None:
-            self._orb_btn_face.stop(); self._orb_btn_face.destroy(); self._orb_btn_face = None
-        self.geometry(f"{cfg.get('window_width')}x{cfg.get('window_height')}")
+            self._orb_btn_face.stop()
+            self._orb_btn_face.pack_forget()   # hide, don't destroy — reused next collapse
+        w, h = cfg.get("window_width"), cfg.get("window_height")
+        # Expand from wherever the float icon sits, but keep the whole card on-screen.
+        x, y = self._clamp(self.winfo_x(), self.winfo_y(), w, h)
+        # Grow the window and lay out the card in one settled repaint (no pop-in).
+        self.geometry(f"{w}x{h}+{x}+{y}")
+        self.update_idletasks()
         self.card.pack(fill="both", expand=True, padx=7, pady=7)
+        self.update_idletasks()
+        cfg.set("window_x", x); cfg.set("window_y", y)
 
     def toggle(self): self.after(0, self._do_toggle)
     def _do_toggle(self): self.hide() if self._visible else self.show()
@@ -661,9 +720,9 @@ class OverlayApp(ctk.CTk):
         self._start_response(text)
 
     def _add_bubble(self, role, content, ts="", scroll=True, lite=False) -> MarkdownBubble:
-        wrap = cfg.get("window_width") - 80
+        wrap = max(260, self.winfo_width() - 90)
         b = MarkdownBubble(self.chat_frame, role, content, ts, wrap_width=wrap, lite=lite)
-        b.pack(fill="x", padx=4, pady=2)
+        b.pack(fill="x", padx=2, pady=4)
         if scroll: self._scroll_bottom()
         return b
 
@@ -726,16 +785,44 @@ class OverlayApp(ctk.CTk):
     def _set_thinking(self, v):
         self._is_thinking = v
         self._face("thinking" if v else "idle")
-        self.send_btn.configure(state="disabled" if v else "normal")
+        # Send button becomes a Stop button while a response is in progress.
+        if v:
+            self.send_btn.configure(text="■", fg_color=C["red"], hover_color=C["red"],
+                                    state="normal", command=self._stop)
+        else:
+            self.send_btn.configure(text="↑", fg_color=C["accent"],
+                                    hover_color=C["accent2"], state="normal",
+                                    command=self._on_send)
         if not v: self.after(3000, lambda: self.status_lbl.configure(text=""))
 
+    def _stop(self):
+        """Interrupt the in-progress response immediately."""
+        self._stop_evt.set()
+        if getattr(self, "_cur_card", None):
+            self._cur_card.finish()
+        if self._cur_bubble:
+            shown = getattr(self, "_final_reply", None)
+            if shown is None:
+                shown = _CLEAN.sub("", self._cur_text).strip()
+            self._cur_bubble.update_text((shown + "  ⏹") if shown else "⏹ Stopped")
+        # Detach so any late tokens from the worker become no-ops.
+        self._cur_bubble = None; self._cur_text = ""; self._cur_card = None
+        self._set_thinking(False)
+        self._set_status("⏹ Stopped", clear_after=3000)
+
     def _start_response(self, user_text, image_b64=None):
+        self._stop_evt.clear()
         self._set_thinking(True)
         self._cur_bubble = self._add_bubble("assistant", "▌", datetime.now().strftime("%H:%M"))
         self._cur_text   = ""
         self._cur_card   = None
         self._final_reply = None
 
+        # Token callback that also honours a stop request. Raising _Stop
+        # (a BaseException) unwinds the streaming loop cleanly.
+        def on_token(tok):
+            if self._stop_evt.is_set(): raise _Stop()
+            self._tok_q.put(tok)
         # Structured events share the token queue so ordering is preserved.
         def on_tool_start(name):   self._tok_q.put(("tool", name))
         def on_tool_done(result):  self._tok_q.put(("tool_done", result))
@@ -743,11 +830,14 @@ class OverlayApp(ctk.CTk):
 
         def run():
             try:
-                reply = self.assistant.chat(user_text, on_token=self._tok_q.put,
+                reply = self.assistant.chat(user_text, on_token=on_token,
                                              on_tool_start=on_tool_start, on_tool_done=on_tool_done,
                                              on_image=on_image, image_b64=image_b64)
-                self._tok_q.put(("final", reply))
-                if self.tts and cfg.get("tts_enabled"): self.tts.speak(reply)
+                if not self._stop_evt.is_set():
+                    self._tok_q.put(("final", reply))
+                    if self.tts and cfg.get("tts_enabled"): self.tts.speak(reply)
+            except _Stop:
+                pass  # user interrupted — already handled in _stop()
             except Exception as ex:
                 self._tok_q.put(f"\n\n⚠️ Error: {ex}"); log.error(f"Chat: {ex}")
             finally: self._tok_q.put(None)
@@ -759,6 +849,9 @@ class OverlayApp(ctk.CTk):
         while True:
             try: tok = self._tok_q.get_nowait()
             except queue.Empty: break
+            # After a stop, drain and ignore everything until the sentinel.
+            if self._stop_evt.is_set() and tok is not None:
+                continue
             if tok is None:
                 self._set_thinking(False)
                 if getattr(self, "_cur_card", None):
