@@ -1,0 +1,53 @@
+# Core UI
+customtkinter>=5.2.2
+
+# LLM
+requests>=2.31.0
+
+# Voice STT
+pyaudio>=0.2.14
+faster-whisper>=1.0.0
+numpy>=1.24.0
+
+# VAD
+webrtcvad-wheels>=2.0.10
+
+# TTS
+pyttsx3>=2.90
+
+# Screen capture
+mss>=9.0.1
+Pillow>=10.0.0
+
+# Web search
+ddgs>=9.0.0
+
+# Clipboard
+pyperclip>=1.8.2
+
+# Reminders
+apscheduler>=3.10.4
+
+# Hotkey
+pynput>=1.7.6
+
+# System tray
+pystray>=0.19.5
+
+# File ops
+pdfplumber>=0.10.0
+python-docx>=1.1.0
+openpyxl>=3.1.2
+
+# OS control
+pyautogui>=0.9.54
+
+# RAG
+faiss-cpu>=1.8.0
+
+# --- Optional ---
+# Wake word:    pip install openwakeword onnxruntime
+# Drag-drop:    pip install tkinterdnd2
+# Win volume:   pip install pycaw comtypes
+# Google APIs:  pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+aider-chat>=0.86.0
