@@ -293,7 +293,7 @@ class CodePanel(ctk.CTkToplevel):
             try:
                 self._proc = subprocess.Popen(
                     cmd, cwd=folder, shell=True, stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT, text=True, bufsize=1,
+                    stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", bufsize=1,
                     creationflags=_CREATE_NO_WINDOW)
                 for line in self._proc.stdout:
                     self.after(0, lambda l=line: self._append(l))

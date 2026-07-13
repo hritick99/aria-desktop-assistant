@@ -91,7 +91,7 @@ def _kill(name):
     if name.lower() in protected: return f"Cannot kill protected: {name}"
     if IS_WIN:
         r = subprocess.run(["taskkill","/F","/IM",name if name.endswith(".exe") else f"{name}.exe"],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
         return r.stdout.strip() or r.stderr.strip() or f"Kill sent: {name}"
     else:
         subprocess.run(["pkill","-f",name], capture_output=True)
@@ -103,7 +103,7 @@ def _url(url):
 
 def _procs():
     if IS_WIN:
-        r = subprocess.run(["tasklist","/FO","CSV","/NH"], capture_output=True, text=True)
+        r = subprocess.run(["tasklist","/FO","CSV","/NH"], capture_output=True, text=True, encoding="utf-8", errors="replace")
         lines = r.stdout.strip().splitlines()[:20]
         procs = []
         for l in lines:
@@ -111,7 +111,7 @@ def _procs():
             if parts: procs.append(f"{parts[0]:30s} PID:{parts[1] if len(parts)>1 else '?'}")
         return "Processes:\n" + "\n".join(procs)
     else:
-        r = subprocess.run(["ps","aux","--sort=-%mem"], capture_output=True, text=True)
+        r = subprocess.run(["ps","aux","--sort=-%mem"], capture_output=True, text=True, encoding="utf-8", errors="replace")
         return "Processes:\n" + "\n".join(r.stdout.splitlines()[:21])
 
 def _active_win():
@@ -126,7 +126,7 @@ def _active_win():
         except Exception as e: return f"Error: {e}"
     else:
         try:
-            r = subprocess.run(["xdotool","getactivewindow","getwindowname"], capture_output=True, text=True)
+            r = subprocess.run(["xdotool","getactivewindow","getwindowname"], capture_output=True, text=True, encoding="utf-8", errors="replace")
             return f"Active window: {r.stdout.strip()}"
         except: return "xdotool not installed: sudo apt install xdotool"
 
@@ -161,11 +161,11 @@ def run_shell(cmd: str, timeout: int = 30, confirmed: bool = False) -> str:
         if IS_WIN:
             r = subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd],
-                capture_output=True, text=True, timeout=timeout,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
                 creationflags=subprocess.CREATE_NO_WINDOW)
         else:
             r = subprocess.run(["bash", "-c", cmd], capture_output=True,
-                               text=True, timeout=timeout)
+                               text=True, encoding="utf-8", errors="replace", timeout=timeout)
         out = (r.stdout or "").strip()
         err = (r.stderr or "").strip()
         parts = []

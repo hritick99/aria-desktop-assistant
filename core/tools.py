@@ -49,7 +49,7 @@ def run_code(code: str, timeout: int = 15) -> str:
         tmp = f.name
     try:
         result = subprocess.run([sys.executable, tmp], capture_output=True,
-                                text=True, timeout=timeout)
+                                text=True, encoding="utf-8", errors="replace", timeout=timeout)
         out = result.stdout.strip()
         err = "\n".join(l for l in result.stderr.splitlines()
                         if "DeprecationWarning" not in l)

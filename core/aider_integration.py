@@ -30,7 +30,7 @@ def available() -> bool:
     """True if the aider CLI is importable/runnable."""
     try:
         r = subprocess.run([_python(), "-m", "aider", "--version"],
-                           capture_output=True, text=True, timeout=25,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=25,
                            creationflags=_CREATE_NO_WINDOW)
         return r.returncode == 0
     except Exception:
@@ -64,7 +64,7 @@ def _model_and_env():
 
 def _git(repo, *args):
     return subprocess.run(["git", *args], cwd=repo, capture_output=True,
-                          text=True, creationflags=_CREATE_NO_WINDOW)
+                          text=True, encoding="utf-8", errors="replace", creationflags=_CREATE_NO_WINDOW)
 
 
 def _ensure_git(repo):
@@ -99,7 +99,7 @@ def run_aider(arg: str, timeout: int = 600) -> str:
            "--message", instruction]
     log.info(f"Aider ({model}) in {repo}: {instruction[:80]}")
     try:
-        r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True,
+        r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace",
                            timeout=timeout, env=env,
                            creationflags=_CREATE_NO_WINDOW)
     except subprocess.TimeoutExpired:

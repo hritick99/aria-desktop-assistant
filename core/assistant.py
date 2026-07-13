@@ -369,6 +369,7 @@ class Assistant:
         on_tool_done:  Optional[Callable] = None,
         on_agent_step: Optional[Callable] = None,
         on_image:      Optional[Callable] = None,
+        image_b64:     Optional[str] = None,
     ) -> str:
         log.info(f"User: {user_message[:80]}")
         log_message(self.session_id, "user", user_message)
@@ -410,6 +411,15 @@ class Assistant:
         system  = self._build_system_prompt(user_message)
         history = self._get_context()
         model   = self._get_model(user_message)
+
+        # User-supplied image → answer directly with the vision model (llava/
+        # qwen2.5vl). Vision models don't do the tag/tool loop reliably.
+        if image_b64:
+            vmodel = cfg.get("model_vision") or cfg.get("ollama_model")
+            log.info(f"Vision query → {vmodel}")
+            reply = self._call_ollama(system, history, on_token, model=vmodel,
+                                      image_b64=image_b64)
+            return self._finalise(reply, user_message)
 
         # Agent loop for complex queries
         if _should_use_agent(user_message):

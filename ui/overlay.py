@@ -334,6 +334,11 @@ class OverlayApp(ctk.CTk):
         self.mic_btn.pack(side="left", padx=(10,2), pady=11)
         self.mic_btn.bind("<ButtonPress-1>",   self._mic_press)
         self.mic_btn.bind("<ButtonRelease-1>", self._mic_release)
+        self.attach_btn = ctk.CTkButton(self.input_bar, text="📎", width=32, height=36,
+                                        fg_color="transparent", hover_color=C["panel2"],
+                                        font=(FONT,14), text_color=C["muted"],
+                                        corner_radius=18, command=self._attach_image)
+        self.attach_btn.pack(side="left", padx=(0,2), pady=11)
         self.input_field = ctk.CTkEntry(self.input_bar,
                                          placeholder_text=f"Message {cfg.get('assistant_name')}…",
                                          font=(FONT,12), fg_color="transparent", border_width=0,
@@ -341,6 +346,7 @@ class OverlayApp(ctk.CTk):
                                          placeholder_text_color=C["muted"], height=36)
         self.input_field.pack(side="left", fill="x", expand=True, padx=(2,6), pady=11)
         self.input_field.bind("<Return>", self._on_send)
+        self.input_field.bind("<Control-v>", self._paste_maybe_image, add="+")
         self._bind_edit_menu(self.input_field)
         self.send_btn = ctk.CTkButton(self.input_bar, text="↑", width=36, height=36,
                                        fg_color=C["accent"], hover_color=C["accent2"],
@@ -514,6 +520,58 @@ class OverlayApp(ctk.CTk):
         self._add_bubble("user", text, datetime.now().strftime("%H:%M"))
         self._start_response(text)
 
+    # ── Image input ───────────────────────────────────────────────────────────
+    def _attach_image(self):
+        if self._is_thinking: return
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            title="Send an image to Aria",
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.gif *.bmp *.webp"),
+                       ("All files", "*.*")])
+        self.lift()
+        if path:
+            self._send_image_file(path)
+
+    def _paste_maybe_image(self, e=None):
+        """Ctrl+V: if the clipboard holds an image, send it; else normal paste."""
+        try:
+            from PIL import ImageGrab
+            img = ImageGrab.grabclipboard()
+        except Exception:
+            img = None
+        if img is not None and hasattr(img, "save"):
+            import io, base64
+            buf = io.BytesIO(); img.convert("RGB").save(buf, format="PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode()
+            text = self.input_field.get().strip()
+            self.input_field.delete(0, "end")
+            self._send_image(b64, text)
+            return "break"       # consume so it doesn't also paste text
+        return None              # let normal text paste happen
+
+    def _send_image_file(self, path):
+        try:
+            import base64, io
+            from PIL import Image
+            img = Image.open(path)
+            if img.width > 1280:
+                r = 1280 / img.width
+                img = img.resize((1280, int(img.height * r)))
+            buf = io.BytesIO(); img.convert("RGB").save(buf, format="PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode()
+            self._send_image(b64, self.input_field.get().strip())
+            self.input_field.delete(0, "end")
+        except Exception as ex:
+            log.error(f"Attach image: {ex}")
+            self._set_status(f"Couldn't load image: {ex}", clear_after=4000)
+
+    def _send_image(self, b64, text=""):
+        if self._is_thinking: return
+        prompt = text or "Describe this image in detail."
+        self._add_bubble("user", text or "🖼 (image)", datetime.now().strftime("%H:%M"))
+        self._add_image_bubble(b64)
+        self._start_response(prompt, image_b64=b64)
+
     # ── Voice ────────────────────────────────────────────────────────────────────
     def _on_voice_status(self, msg): self.after(0, lambda: self._set_status(msg))
 
@@ -671,7 +729,7 @@ class OverlayApp(ctk.CTk):
         self.send_btn.configure(state="disabled" if v else "normal")
         if not v: self.after(3000, lambda: self.status_lbl.configure(text=""))
 
-    def _start_response(self, user_text):
+    def _start_response(self, user_text, image_b64=None):
         self._set_thinking(True)
         self._cur_bubble = self._add_bubble("assistant", "▌", datetime.now().strftime("%H:%M"))
         self._cur_text   = ""
@@ -687,7 +745,7 @@ class OverlayApp(ctk.CTk):
             try:
                 reply = self.assistant.chat(user_text, on_token=self._tok_q.put,
                                              on_tool_start=on_tool_start, on_tool_done=on_tool_done,
-                                             on_image=on_image)
+                                             on_image=on_image, image_b64=image_b64)
                 self._tok_q.put(("final", reply))
                 if self.tts and cfg.get("tts_enabled"): self.tts.speak(reply)
             except Exception as ex:

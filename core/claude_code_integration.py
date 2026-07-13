@@ -66,7 +66,7 @@ def available() -> bool:
     if not exe:
         return False
     try:
-        r = subprocess.run([exe, "--version"], capture_output=True, text=True,
+        r = subprocess.run([exe, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace",
                            timeout=25, creationflags=_CREATE_NO_WINDOW)
         return r.returncode == 0
     except Exception:
@@ -113,7 +113,7 @@ def complete_text(system, messages, on_token=None, timeout=240) -> str:
            "NotebookEdit TodoWrite MultiEdit"]
     try:
         r = subprocess.run(cmd, cwd=workdir, input=prompt, capture_output=True,
-                           text=True, timeout=timeout, env=_sub_env(),
+                           text=True, encoding="utf-8", errors="replace", timeout=timeout, env=_sub_env(),
                            creationflags=_CREATE_NO_WINDOW)
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Claude Code timed out after {timeout}s")
@@ -152,7 +152,7 @@ def run_agent(task: str, workdir: str = None, timeout: int = 1800) -> str:
            "--output-format", "text"]
     log.info(f"Delegating to Claude Code agent in {workdir}: {task[:80]}")
     try:
-        r = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True,
+        r = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True, encoding="utf-8", errors="replace",
                            timeout=timeout, env=_sub_env(),
                            creationflags=_CREATE_NO_WINDOW)
     except subprocess.TimeoutExpired:
@@ -186,7 +186,7 @@ def run_claude_code(arg: str, timeout: int = 900) -> str:
     cmd = [exe, "-p", instruction, "--permission-mode", "acceptEdits"]
     log.info(f"Claude Code in {repo}: {instruction[:80]}")
     try:
-        r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True,
+        r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace",
                            timeout=timeout, env=_sub_env(),
                            creationflags=_CREATE_NO_WINDOW)
     except subprocess.TimeoutExpired:
