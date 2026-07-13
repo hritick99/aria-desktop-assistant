@@ -28,16 +28,17 @@ class ToolCard(ctk.CTkFrame):
     def __init__(self, parent, **kw):
         super().__init__(parent, fg_color=C["panel"], corner_radius=12, **kw)
         self._entries = []          # [label, result | None]
-        self._open = False
+        self._open = True           # start expanded so work is visible live
         hdr = ctk.CTkFrame(self, fg_color="transparent", cursor="hand2")
         hdr.pack(fill="x")
-        self._chev = ctk.CTkLabel(hdr, text="▸", width=16, font=(FONT,11),
+        self._chev = ctk.CTkLabel(hdr, text="▾", width=16, font=(FONT,11),
                                   text_color=C["muted"])
         self._chev.pack(side="left", padx=(10,0), pady=5)
         self._title = ctk.CTkLabel(hdr, text="Working…", font=(FONT,11),
                                    text_color=C["dim"], anchor="w")
         self._title.pack(side="left", padx=6, pady=5, fill="x", expand=True)
         self._body = ctk.CTkFrame(self, fg_color="transparent")
+        self._body.pack(fill="x", padx=12, pady=(0,8))
         for w in (hdr, self._chev, self._title):
             w.bind("<Button-1>", self._toggle)
 
@@ -54,9 +55,14 @@ class ToolCard(ctk.CTkFrame):
         if self._open: self._rebuild()
 
     def finish(self):
+        # Collapse to a tidy summary once done (still re-expandable).
         n = len(self._entries)
         self._title.configure(text=f"Used {n} tool{'s' if n != 1 else ''}",
                               text_color=C["muted"])
+        if self._open:
+            self._open = False
+            self._chev.configure(text="▸")
+            self._body.pack_forget()
 
     def _toggle(self, e=None):
         self._open = not self._open
@@ -74,7 +80,10 @@ class ToolCard(ctk.CTkFrame):
             ctk.CTkLabel(self._body, text=label, font=(FONT,10,"bold"),
                          text_color=C["dim"], anchor="w", justify="left",
                          wraplength=wrap).pack(fill="x", pady=(4,0))
-            if result:
+            if result is None:
+                ctk.CTkLabel(self._body, text="⏳ working…", font=("Consolas",9),
+                             text_color=C["reminder"], anchor="w").pack(fill="x", pady=(0,2))
+            else:
                 prev = result.strip()
                 if len(prev) > 400: prev = prev[:400] + " …"
                 ctk.CTkLabel(self._body, text=prev, font=("Consolas",9),

@@ -334,6 +334,14 @@ class Assistant:
             "you lack the capability.",
             "- Emit exactly ONE tag, then STOP. The tool runs and its real result "
             "comes back to you; only then answer the user.",
+            "- NARRATE as you work: before a tool, write one short line saying what "
+            "you're about to do (e.g. 'Committing the changes…', 'Pushing to GitHub…').",
+            "- NEVER stop silently or give up. If you're blocked — you need a "
+            "decision, a file path, a name, credentials, or permission — ASK "
+            f"{user} a specific question in plain text and wait for the answer. "
+            "Do NOT retry the same failing command more than once.",
+            "- If a tool result shows an error, tell the user exactly what failed "
+            "and what you need from them to continue — don't hide it or loop.",
             "- Never fabricate a tool result.",
             "- Confirm reminders and OS actions clearly.",
         ]

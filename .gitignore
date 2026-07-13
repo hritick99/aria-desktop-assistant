@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Aria runtime data (never commit — may contain keys/tokens)
+*.db
+*.log
+.desktop_assistant/
+credentials.json
+*_token.json
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
